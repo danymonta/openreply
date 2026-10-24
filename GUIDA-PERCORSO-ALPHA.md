@@ -83,9 +83,32 @@ docker compose -f compose.selfhost.yml --profile local up -d --build
 
 ---
 
-## 5. Produzione consigliata: un VPS con Docker
+## 5. Produzione
 
-**Scelta consigliata:** Hetzner Cloud (data center in Germania/Finlandia, GDPR) CX23 o CAX11, Ubuntu 24.04, con questo stesso `compose.selfhost.yml` + Caddy.
+### 5a. Quella attiva: Railway (scelta il 25/10/2026)
+
+- Progetto Railway **openreply** (workspace Percorso Alpha), piano Hobby 5 $/mese con 5 $ di consumo inclusi; spesa prevista 5–10 $/mese. Imposta un tetto in Railway → Usage.
+- Codice: repo privato **github.com/danymonta/openreply**, branch `main`. Ogni `git push` su `main` ridistribuisce da solo web, worker e cron.
+- Servizi (tutti dallo stesso Dockerfile, il ruolo lo sceglie `OPENREPLY_ROLE`):
+
+| Servizio | Ruolo | Note |
+| --- | --- | --- |
+| `web` | pannello + webhook | URL pubblico: **https://web-production-be8a6.up.railway.app**; applica le migrazioni all'avvio |
+| `worker` | invia i DM | sempre acceso, nessun URL pubblico |
+| `cron` | rinnovo token, aggancio reel, follower | chiama `/api/cron/*` con `CRON_SECRET` |
+| `Postgres`, `Redis` | database e coda | solo rete privata Railway |
+
+- Segreti di produzione (`NEXTAUTH_SECRET`, `CRON_SECRET`, `ENCRYPTION_KEY`, `WEBHOOK_VERIFY_TOKEN`) generati a caso e diversi da quelli locali; li vedi in Railway → servizio → Variables. **Copia `ENCRYPTION_KEY` nel tuo password manager.**
+- Variabili che inserisci **tu** in Railway (Variables, su `web`, `worker` e `cron`):
+  - `RESEND_API_KEY` (da resend.com, piano gratuito). Con il mittente `onboarding@resend.dev` Resend consegna solo all'email con cui ti sei registrato a Resend: va bene, l'accesso è comunque solo tuo.
+  - `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `FACEBOOK_APP_SECRET` (dall'app Meta, §4).
+- Nei passaggi Meta del §4 usa come dominio `web-production-be8a6.up.railway.app`: redirect `https://web-production-be8a6.up.railway.app/api/instagram/callback`, webhook `https://web-production-be8a6.up.railway.app/api/webhook`, token di verifica = `WEBHOOK_VERIFY_TOKEN` del servizio `web`.
+- Stato: `https://web-production-be8a6.up.railway.app/api/health`. Log: `railway logs --service worker` dalla cartella del progetto.
+- Backup: Railway → Postgres → Backups (attiva i backup programmati).
+
+### 5b. Alternativa più economica: un VPS con Docker
+
+**Opzione:** Hetzner Cloud (data center in Germania/Finlandia, GDPR) CX23 o CAX11, Ubuntu 24.04, con questo stesso `compose.selfhost.yml` + Caddy.
 
 ```bash
 # sul VPS, come utente non-root con Docker installato
@@ -110,7 +133,7 @@ Il DNS: record `A` di `reply.tuodominio.it` → IP del VPS (su Cloudflare lascia
 | Meta API | Gratuita | 0 € |
 | **Totale** | | **~6–11 €/mese** |
 
-Alternative: **Railway** (~10–20 $/mese a consumo, zero gestione server), **Render** (web + worker + Postgres + Redis ≈ 30 $/mese), oppure lo stack gratuito descritto in `docs/stack.md` (Vercel + Neon + Redis Cloud + VM Oracle gratuita): 0 € ma cinque servizi da tenere d'occhio. Per te il VPS unico è il miglior rapporto costo/controllo.
+Altre alternative: **Render** (web + worker + Postgres + Redis ≈ 30 $/mese), oppure lo stack gratuito descritto in `docs/stack.md` (Vercel + Neon + Redis Cloud + VM Oracle gratuita): 0 € ma cinque servizi da tenere d'occhio. Il VPS costa meno di Railway ma richiede di gestire il server.
 
 Tempo di manutenzione: ~1 ora al mese (§8).
 
