@@ -1,0 +1,21 @@
+# Caddy: HTTPS (automatic Let's Encrypt) in front of the OpenReply web app.
+# OPENREPLY_DOMAIN comes from .env, e.g. reply.percorsoalpha.it
+
+{$OPENREPLY_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# Basic flood protection: Meta webhooks are small JSON bodies.
+	request_body {
+		max_size 1MB
+	}
+
+	reverse_proxy web:3000
+}

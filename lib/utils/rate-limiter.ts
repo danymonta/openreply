@@ -16,10 +16,24 @@
 
 import Redis from "ioredis";
 
-const RATE_LIMIT_MAX = 750; // private replies per hour, per Meta's documented cap
+// Meta's documented cap is 750 private replies per hour. DM_RATE_LIMIT_PER_HOUR
+// lowers it to leave headroom; it can never raise it above 750.
+const META_PRIVATE_REPLY_CAP = 750;
+const configuredLimit = Number.parseInt(process.env.DM_RATE_LIMIT_PER_HOUR ?? "", 10);
+const RATE_LIMIT_MAX =
+  Number.isFinite(configuredLimit) && configuredLimit > 0
+    ? Math.min(configuredLimit, META_PRIVATE_REPLY_CAP)
+    : META_PRIVATE_REPLY_CAP;
 const RATE_LIMIT_WINDOW = 3600; // 1 hour in seconds
 const REQUEUE_DELAY_MS = 30 * 60 * 1000; // 30 minutes
-const MAX_REQUEUE_ATTEMPTS = 3;
+// A private reply stays valid for 7 days after the comment, so a burst can be
+// drained over hours instead of dropped. DM_MAX_REQUEUE_ATTEMPTS raises the
+// number of 30-minute retries (default 3, capped at 7 days' worth).
+const configuredRequeues = Number.parseInt(process.env.DM_MAX_REQUEUE_ATTEMPTS ?? "", 10);
+const MAX_REQUEUE_ATTEMPTS =
+  Number.isFinite(configuredRequeues) && configuredRequeues > 0
+    ? Math.min(configuredRequeues, 300)
+    : 3;
 
 let redis: Redis | null = null;
 
