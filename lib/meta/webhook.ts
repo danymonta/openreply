@@ -83,6 +83,8 @@ interface WebhookEntry {
       is_deleted?: boolean;
       is_unsupported?: boolean;
       attachments?: Array<{ type?: string }>;
+      // Present when the DM is a reply to one of the account's Stories.
+      reply_to?: { mid?: string; story?: { id?: string; url?: string } };
     };
   }>;
 }
@@ -92,6 +94,8 @@ export interface WebhookMessageEvent {
   messageId: string;
   messageText: string;
   senderId: string;
+  // A reply to one of the account's Stories rather than a plain DM.
+  isStoryReply?: boolean;
 }
 
 export interface WebhookPostbackEvent {
@@ -233,6 +237,7 @@ export function parseMessageEvents(
         messageId,
         messageText: text,
         senderId,
+        ...(message.reply_to?.story ? { isStoryReply: true } : {}),
       });
     }
   }

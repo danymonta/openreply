@@ -380,6 +380,26 @@ async function scheduleSequenceStep({
   );
 }
 
+/**
+ * The part of an inbound DM that keywords are matched against. With
+ * DM_TRIGGER_MATCH=start a plain DM only triggers when it opens with a keyword
+ * ("PRONTO", "Coaching info"), so a word that comes up mid-conversation with a
+ * human setter does not restart the automation. Story replies keep matching
+ * anywhere, as they do in other DM tools.
+ */
+function dmTriggerText(
+  messageText: string,
+  keywords: string[],
+  isStoryReply: boolean | undefined
+): string {
+  if (process.env.DM_TRIGGER_MATCH !== "start" || isStoryReply) return messageText;
+  const longestKeyword = Math.max(
+    1,
+    ...keywords.map((keyword) => keyword.trim().split(/\s+/).length)
+  );
+  return messageText.trim().split(/\s+/).slice(0, longestKeyword).join(" ");
+}
+
 function connectionScope(data: DmQueueJob) {
   return data.accountConnectionId ? { instagramAccountId: data.accountConnectionId } : {};
 }
@@ -1524,7 +1544,7 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
     const matchResult = automation.matchAnyWord
       ? { matched: true, matchedKeyword: null }
       : matchKeywords(
-          messageText,
+          dmTriggerText(messageText, automation.keywords, job.data.isStoryReply),
           automation.keywords,
           automation.wholeWordMatch
         );

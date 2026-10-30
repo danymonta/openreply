@@ -378,6 +378,22 @@ describe("parseMessageEvents", () => {
     ]);
   });
 
+  it("should flag a reply to one of the account's Stories", () => {
+    const payload = messagingPayload([
+      {
+        sender: { id: "user_999" },
+        recipient: { id: "ig_456" },
+        message: {
+          mid: "mid_story",
+          text: "GUIDA",
+          reply_to: { story: { id: "story_1", url: "https://example.com/s" } },
+        },
+      },
+    ]);
+
+    expect(parseMessageEvents(payload)[0]).toMatchObject({ isStoryReply: true });
+  });
+
   it("should ignore echoes of the account's own messages", () => {
     const payload = messagingPayload([
       {

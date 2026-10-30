@@ -81,6 +81,9 @@ export interface ProcessMessageJob {
   messageId: string;
   messageText: string;
   senderId: string;
+  // Story replies always match keywords anywhere in the text; plain DMs can be
+  // limited to keywords at the start (DM_TRIGGER_MATCH=start).
+  isStoryReply?: boolean;
 }
 
 export type DmQueueJob =

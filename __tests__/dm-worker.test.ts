@@ -1895,3 +1895,56 @@ describe("DM Worker — message sequences and first names", () => {
     expect(mockQueueAdd).not.toHaveBeenCalled();
   });
 });
+
+describe("DM Worker — keyword at the start of a DM (DM_TRIGGER_MATCH=start)", () => {
+  const dmAutomation = {
+    ...mockAutomation,
+    dmTriggerEnabled: true,
+    requireFollow: false,
+    followPromptMessage: null,
+    followPromptButtonLabel: null,
+  };
+
+  function messageJob(messageText: string, isStoryReply?: boolean) {
+    return {
+      name: "process-message",
+      data: {
+        instagramAccountId: "ig_456",
+        messageId: `mid_${messageText.length}`,
+        messageText,
+        senderId: "commenter_999",
+        isStoryReply,
+      },
+      id: "message_job_start",
+      attemptsMade: 0,
+    };
+  }
+
+  beforeEach(() => {
+    vi.stubEnv("DM_TRIGGER_MATCH", "start");
+    mockPrisma.automation.findMany.mockResolvedValue([dmAutomation]);
+    mockMatchKeywords.mockImplementation((text: string, keywords: string[]) => {
+      const hit = keywords.find((k) => text.toLowerCase().includes(k.toLowerCase()));
+      return { matched: Boolean(hit), matchedKeyword: hit ?? null };
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("ignores a keyword that only appears mid-conversation", async () => {
+    await getProcessor()(messageJob("ok grazie, mi interessa il LINK che dicevi"));
+    expect(mockSendDirectMessage).not.toHaveBeenCalled();
+  });
+
+  it("answers a DM that opens with the keyword", async () => {
+    await getProcessor()(messageJob("LINK per favore"));
+    expect(mockSendDirectMessage).toHaveBeenCalled();
+  });
+
+  it("still matches anywhere in a Story reply", async () => {
+    await getProcessor()(messageJob("wow mandami il LINK", true));
+    expect(mockSendDirectMessage).toHaveBeenCalled();
+  });
+});
