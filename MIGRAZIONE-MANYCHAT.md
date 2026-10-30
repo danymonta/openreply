@@ -87,3 +87,11 @@ INFO COACHING invia 3 messaggi di fila con 5 secondi di pausa, poi la conversazi
 3. Verificare #1 (follower) e, se Meta lo consente, svilupparlo.
 4. Test con l'account @danymonta.raw su 2–3 automazioni.
 5. Cambio: scollegare ManyChat, dare a OpenReply il controllo delle conversazioni in Meta Business Suite, attivare le campagne. ManyChat resta pagato fino a fine mese come paracadute.
+
+## 5. Stato al 30/10/2026
+- Sviluppati e online: sequenze di messaggi con pause, `{nome}`, campagne "solo DM e Storie" (nessun post), parole chiave nei DM valide solo a inizio messaggio (`DM_TRIGGER_MATCH=start`, come "Message begins with" di ManyChat; le risposte alle Storie restano "contiene").
+- Create su OpenReply **29 campagne in pausa** con testi, pulsanti, link, follow gate, risposte pubbliche e domande di ManyChat:
+  - 16 da commento: ELASTICI, PECTUS, CALCOLATORE, QUIZ, METODO, ESERCIZI, GUIDA, TEST, TRACKER, RISCALDAMENTO, CHECKLIST, ADDOME, DIETA, SITO (+Storia), TOOL/ATTREZZI (unite, +Storia/DM), ALPHA.
+  - 13 solo DM/Storia: INFO COACHING, GUIDA, SCHEDA, DIETA, PECTUS, QUIZ, CIBO, TEST, PERCORSO (DOC), METODO, CHECKLIST, ADDOME, TRAZIONE.
+- Restano su ManyChat: "Say hi to new followers" (trigger follow non disponibile), le 5 automazioni "MESSANGER" (sono commenti Facebook, non Instagram), il Conversation Starter di INFO COACHING.
+- Differenze volute: i messaggi inviati in ManyChat *dopo* la risposta alla domanda ("Mi piacerebbe sapere se posso essere la persona giusta…") non sono replicati: da lì prosegue il setter. Corretti i refusi "te o mando" → "te lo mando" e "Ti ho ho scritto".
