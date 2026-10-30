@@ -35,6 +35,7 @@ interface Campaign {
   followPromptButtonLabel: string | null;
   isActive: boolean;
   wholeWordMatch: boolean;
+  folder: string | null;
   instagramAccountId: string;
   instagramAccount: {
     username: string;
@@ -63,6 +64,8 @@ interface Campaign {
   };
 }
 
+const NO_FOLDER = "__none__";
+
 export default function CampaignsPage() {
   const { t, label } = useI18n();
   const router = useRouter();
@@ -83,6 +86,8 @@ export default function CampaignsPage() {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  // "all", NO_FOLDER, or a folder name.
+  const [folderFilter, setFolderFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused">(
     "all"
   );
@@ -214,6 +219,43 @@ export default function CampaignsPage() {
     }
   }
 
+  async function moveToFolder(id: string, folder: string | null) {
+    setMenuOpenId(null);
+    try {
+      await fetch(`/api/automations?id=${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder }),
+      });
+      setAutomations((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, folder } : a))
+      );
+    } catch (err) {
+      console.error("Failed to move to folder:", err);
+    }
+  }
+
+  function moveToNewFolder(id: string) {
+    const name = window.prompt(t("Folder name"))?.trim();
+    if (name) void moveToFolder(id, name.slice(0, 60));
+  }
+
+  async function renameFolder(from: string, to: string | null) {
+    try {
+      await fetch("/api/automations/folders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to }),
+      });
+      setAutomations((prev) =>
+        prev.map((a) => (a.folder === from ? { ...a, folder: to } : a))
+      );
+      setFolderFilter(to ?? "all");
+    } catch (err) {
+      console.error("Failed to rename folder:", err);
+    }
+  }
+
   async function copyReelUrl(auto: Campaign) {
     setMenuOpenId(null);
     if (!auto.postUrl) return;
@@ -266,8 +308,16 @@ export default function CampaignsPage() {
     );
   }
 
+  const folders = [
+    ...new Set(automations.map((a) => a.folder).filter((f): f is string => Boolean(f))),
+  ].sort((a, b) => a.localeCompare(b));
+  const unfiledCount = automations.filter((a) => !a.folder).length;
+
   const query = search.trim().toLowerCase();
   const filtered = automations.filter((a) => {
+    if (folderFilter === NO_FOLDER && a.folder) return false;
+    if (folderFilter !== "all" && folderFilter !== NO_FOLDER && a.folder !== folderFilter)
+      return false;
     if (statusFilter === "active" && !a.isActive) return false;
     if (statusFilter === "paused" && a.isActive) return false;
     if (!query) return true;
@@ -311,6 +361,63 @@ export default function CampaignsPage() {
           </Link>
         </div>
       </div>
+
+      {/* Folders */}
+      {automations.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            { key: "all", name: t("All campaigns"), count: automations.length },
+            ...folders.map((f) => ({
+              key: f,
+              name: `📁 ${f}`,
+              count: automations.filter((a) => a.folder === f).length,
+            })),
+            ...(folders.length > 0 && unfiledCount > 0
+              ? [{ key: NO_FOLDER, name: t("No folder"), count: unfiledCount }]
+              : []),
+          ].map((chip) => (
+            <button
+              key={chip.key}
+              type="button"
+              onClick={() => setFolderFilter(chip.key)}
+              className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+                folderFilter === chip.key
+                  ? "border-accent/40 bg-background font-medium text-foreground"
+                  : "border-border text-muted hover:text-foreground"
+              }`}
+            >
+              {chip.name} <span className="text-xs text-muted">{chip.count}</span>
+            </button>
+          ))}
+          {folderFilter !== "all" && folderFilter !== NO_FOLDER && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  const name = window
+                    .prompt(t("Rename folder"), folderFilter)
+                    ?.trim();
+                  if (name && name !== folderFilter)
+                    void renameFolder(folderFilter, name.slice(0, 60));
+                }}
+                className="text-xs text-muted hover:text-foreground"
+              >
+                {t("Rename")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm(t("Remove this folder? Its campaigns are kept, just unfiled.")))
+                    void renameFolder(folderFilter, null);
+                }}
+                className="text-xs text-muted hover:text-error"
+              >
+                {t("Remove folder")}
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Search + status filter */}
       {automations.length > 0 && (
@@ -551,7 +658,36 @@ export default function CampaignsPage() {
                         className="fixed inset-0 z-10"
                         onClick={() => setMenuOpenId(null)}
                       />
-                      <div className="absolute right-0 z-20 mt-1 w-36 overflow-hidden rounded-lg border border-border bg-surface shadow-lg">
+                      <div className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-lg border border-border bg-surface shadow-lg">
+                        <p className="px-3 pt-2 pb-1 text-xs text-muted">
+                          {t("Move to folder")}
+                        </p>
+                        {folders
+                          .filter((f) => f !== auto.folder)
+                          .map((f) => (
+                            <button
+                              key={f}
+                              onClick={() => void moveToFolder(auto.id, f)}
+                              className="block w-full truncate px-3 py-1.5 text-left text-sm text-foreground hover:bg-surface-hover"
+                            >
+                              📁 {f}
+                            </button>
+                          ))}
+                        <button
+                          onClick={() => moveToNewFolder(auto.id)}
+                          className="block w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-surface-hover"
+                        >
+                          {t("+ New folder")}
+                        </button>
+                        {auto.folder && (
+                          <button
+                            onClick={() => void moveToFolder(auto.id, null)}
+                            className="block w-full px-3 py-1.5 text-left text-sm text-muted hover:bg-surface-hover"
+                          >
+                            {t("Remove from folder")}
+                          </button>
+                        )}
+                        <div className="my-1 border-t border-border" />
                         <button
                           onClick={() => void duplicateAutomation(auto.id)}
                           className="block w-full px-3 py-2 text-left text-sm text-foreground hover:bg-surface-hover"

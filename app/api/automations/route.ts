@@ -25,6 +25,15 @@ import {
 // immediately), so never cache it at the route or CDN layer.
 export const dynamic = "force-dynamic";
 
+// Folder name; empty or whitespace files the campaign under no folder.
+const folderSchema = z
+  .string()
+  .trim()
+  .max(60)
+  .transform((value) => value || null)
+  .optional()
+  .nullable();
+
 const createAutomationSchema = z
   .object({
     name: z.string().min(1).max(100),
@@ -51,6 +60,7 @@ const createAutomationSchema = z
     // Instagram's messaging window.
     followUpDelayMinutes: z.number().int().min(0).max(1440).optional().default(0),
     sequenceSteps: sequenceStepsSchema.optional().default([]),
+    folder: folderSchema,
     publicReplyEnabled: z.boolean().optional().default(false),
     publicReplyMessage: z.string().max(1000).optional().nullable(),
     publicReplyMessages: z
@@ -115,6 +125,7 @@ const updateAutomationSchema = z.object({
   followUpMessage: z.string().max(1000).optional().nullable(),
   followUpDelayMinutes: z.number().int().min(0).max(1440).optional(),
   sequenceSteps: sequenceStepsSchema.optional(),
+  folder: folderSchema,
   publicReplyEnabled: z.boolean().optional(),
   publicReplyMessage: z.string().max(1000).optional().nullable(),
   publicReplyMessages: z.array(z.string().max(1000)).max(10).optional(),
@@ -412,6 +423,7 @@ export async function POST(request: NextRequest) {
         ? parsed.data.followUpDelayMinutes
         : 0,
       sequenceSteps: parsed.data.sequenceSteps,
+      folder: parsed.data.folder ?? null,
       publicReplyEnabled: parsed.data.publicReplyEnabled,
       publicReplyMessages: parsed.data.publicReplyEnabled
         ? publicReplyList
