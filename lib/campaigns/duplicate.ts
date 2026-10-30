@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/client";
+import { parseSequenceSteps } from "@/lib/automation/sequence";
 import { generateReportShareSlug } from "@/lib/reports/share";
 import { TRACKED_LINK_ORDER } from "@/lib/tracking/link-order";
 import { generateTrackedLinkSlug } from "@/lib/tracking/server";
@@ -63,6 +64,9 @@ export async function duplicateCampaign({
       createdAt: undefined,
       updatedAt: undefined,
       name: buildDuplicateName(settings.name),
+      // A JSON column reads back typed as possibly null, which Prisma will not
+      // write back as-is; re-validating also drops anything malformed.
+      sequenceSteps: parseSequenceSteps(settings.sequenceSteps),
       isActive: false,
       reportShareSlug: generateReportShareSlug(),
       trackedLinks: {

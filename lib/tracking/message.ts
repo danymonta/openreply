@@ -34,19 +34,42 @@ export function replaceUrlWithTrackedPlaceholder(
   return message.replace(withoutTrailingSlash, "{link}");
 }
 
+// {nome}, {name} and {first_name} all insert the recipient's first name.
+const NAME_TOKEN = /\{(?:nome|name|first_name)\}/gi;
+
+/** True when a message uses a first-name token, so the name is worth fetching. */
+export function hasNameToken(message: string | null | undefined): boolean {
+  return Boolean(message) && new RegExp(NAME_TOKEN.source, "i").test(message as string);
+}
+
 /**
- * Personalize {username} and strip the {link} token — used when the link is
- * delivered as a separate button rather than inline in the message text.
+ * Fill {username} and the first-name tokens. A first name falls back to the
+ * username, because Instagram only returns a profile name for some users.
+ */
+function personalize(
+  message: string,
+  commenterName: string | null | undefined,
+  firstName: string | null | undefined
+) {
+  return message
+    .replace(/\{username\}/gi, commenterName ?? "there")
+    .replace(NAME_TOKEN, firstName || commenterName || "");
+}
+
+/**
+ * Personalize {username} / {nome} and strip the {link} token — used when the
+ * link is delivered as a separate button rather than inline in the message text.
  */
 export function renderMessageWithoutLink({
   message,
   commenterName,
+  firstName,
 }: {
   message: string;
   commenterName?: string | null;
+  firstName?: string | null;
 }) {
-  return message
-    .replace(/\{username\}/gi, commenterName ?? "there")
+  return personalize(message, commenterName, firstName)
     .replace(/\s*\{link\}\s*/gi, " ")
     .trim();
 }
@@ -69,17 +92,19 @@ export function buildTrackedUrl(
 export function renderMessageWithTracking({
   message,
   commenterName,
+  firstName,
   trackedLinks,
   baseUrl,
   recipientToken,
 }: {
   message: string;
   commenterName?: string | null;
+  firstName?: string | null;
   trackedLinks?: MessageTrackedLink[];
   baseUrl?: string;
   recipientToken?: string;
 }) {
-  let rendered = message.replace(/\{username\}/gi, commenterName ?? "there");
+  let rendered = personalize(message, commenterName, firstName);
   const primaryLink = trackedLinks?.[0];
 
   if (!primaryLink) return rendered;

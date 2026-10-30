@@ -16,6 +16,7 @@ const {
   mockQueueAdd,
   mockReserveWorkspaceDMSend,
   mockReleaseWorkspaceDMReservation,
+  mockGetUserProfile,
 } = vi.hoisted(() => ({
   mockPrisma: {
     zernioConnection: { findUnique: vi.fn() },
@@ -53,6 +54,7 @@ const {
   mockQueueAdd: vi.fn(),
   mockReserveWorkspaceDMSend: vi.fn(),
   mockReleaseWorkspaceDMReservation: vi.fn(),
+  mockGetUserProfile: vi.fn(),
 }));
 
 vi.mock("@/lib/db/client", () => ({
@@ -64,6 +66,7 @@ vi.mock("@/lib/meta/client", () => ({
   sendPrivateReplyWithLinkButton: mockSendPrivateReplyWithLinkButton,
   sendPrivateReplyWithButton: mockSendPrivateReplyWithButton,
   getUserFollowStatus: mockGetUserFollowStatus,
+  getUserProfile: mockGetUserProfile,
   sendDirectMessageWithButton: mockSendDirectMessageWithButton,
   sendDirectMessage: mockSendDirectMessage,
   sendDirectMessageWithLinkButton: mockSendDirectMessageWithLinkButton,
@@ -222,6 +225,7 @@ function createMockPostbackJob(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockGetUserProfile.mockResolvedValue(null);
   mockPrisma.postbackDelivery.create.mockReset().mockResolvedValue({});
   mockPrisma.postbackDelivery.delete.mockReset().mockResolvedValue({});
 
@@ -1763,4 +1767,131 @@ it("retains the public reply claim if sending succeeded but its log write failed
   await process({ ...createMockJob(), id: "next-poll" });
   expect(sendCommentReply).toHaveBeenCalledTimes(1);
   expect(mockSendPrivateReply).toHaveBeenCalledTimes(1);
+});
+
+describe("DM Worker — message sequences and first names", () => {
+  const sequenceAutomation = {
+    ...mockAutomation,
+    dmTriggerEnabled: true,
+    requireFollow: false,
+    followPromptMessage: null,
+    followPromptButtonLabel: null,
+    followUpEnabled: false,
+    followUpMessage: null,
+    dmMessage: "Ciao {nome}!",
+    sequenceSteps: [
+      { message: "Second for {nome}", delaySeconds: 5 },
+      { message: "Third", delaySeconds: 10 },
+    ],
+  };
+
+  function createMessageJob() {
+    return {
+      name: "process-message",
+      data: {
+        instagramAccountId: "ig_456",
+        messageId: "mid_seq",
+        messageText: "LINK",
+        senderId: "commenter_999",
+      },
+      id: "message_job_seq",
+      attemptsMade: 0,
+    };
+  }
+
+  function createSequenceJob(step: number) {
+    return {
+      name: "process-followup",
+      data: {
+        instagramAccountId: "ig_456",
+        userId: "commenter_999",
+        automationId: "auto_789",
+        commenterName: "commenter_user",
+        firstName: "Mario",
+        sequenceStep: step,
+        sequenceRunKey: "mid_seq",
+      },
+      id: `seq_job_${step}`,
+      attemptsMade: 0,
+    };
+  }
+
+  beforeEach(() => {
+    mockPrisma.automation.findMany.mockResolvedValue([sequenceAutomation]);
+    mockPrisma.automation.findFirst.mockResolvedValue(sequenceAutomation);
+    mockGetUserProfile.mockResolvedValue({ name: "Mario Rossi", username: "mario.r" });
+  });
+
+  it("fills {nome} with the first name from the Instagram profile", async () => {
+    await getProcessor()(createMessageJob());
+
+    expect(mockSendDirectMessage).toHaveBeenCalledWith(
+      "decrypted_token",
+      "ig_456",
+      "commenter_999",
+      "Ciao Mario!"
+    );
+  });
+
+  it("falls back to the username when Instagram shares no profile name", async () => {
+    mockGetUserProfile.mockResolvedValue(null);
+    await getProcessor()(createMessageJob());
+
+    expect(mockSendDirectMessage).toHaveBeenCalledWith(
+      "decrypted_token",
+      "ig_456",
+      "commenter_999",
+      "Ciao commenter_user!"
+    );
+  });
+
+  it("queues the first sequence message after the reveal, with its pause", async () => {
+    await getProcessor()(createMessageJob());
+
+    expect(mockQueueAdd).toHaveBeenCalledWith(
+      "process-followup",
+      expect.objectContaining({
+        automationId: "auto_789",
+        userId: "commenter_999",
+        firstName: "Mario",
+        sequenceStep: 0,
+      }),
+      expect.objectContaining({ delay: 5000 })
+    );
+  });
+
+  it("sends a sequence message and queues the next one", async () => {
+    await getProcessor()(createSequenceJob(0));
+
+    expect(mockSendDirectMessage).toHaveBeenCalledWith(
+      "decrypted_token",
+      "ig_456",
+      "commenter_999",
+      "Second for Mario"
+    );
+    expect(mockQueueAdd).toHaveBeenCalledWith(
+      "process-followup",
+      expect.objectContaining({ sequenceStep: 1, sequenceRunKey: "mid_seq" }),
+      expect.objectContaining({ delay: 10000 })
+    );
+  });
+
+  it("stops after the last message", async () => {
+    await getProcessor()(createSequenceJob(1));
+
+    expect(mockSendDirectMessage).toHaveBeenCalledWith(
+      "decrypted_token",
+      "ig_456",
+      "commenter_999",
+      "Third"
+    );
+    expect(mockQueueAdd).not.toHaveBeenCalled();
+  });
+
+  it("ends the sequence when a message cannot be delivered", async () => {
+    mockSendDirectMessage.mockRejectedValueOnce(new Error("outside of allowed window"));
+    await getProcessor()(createSequenceJob(0));
+
+    expect(mockQueueAdd).not.toHaveBeenCalled();
+  });
 });

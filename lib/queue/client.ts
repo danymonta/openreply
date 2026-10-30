@@ -65,6 +65,12 @@ export interface ProcessFollowUpJob {
   userId: string;
   automationId: string;
   commenterName?: string | null;
+  firstName?: string | null;
+  // Set for a message of the campaign's sequence (Automation.sequenceSteps):
+  // the index to send, and the trigger it belongs to. Absent for the classic
+  // thank-you follow-up.
+  sequenceStep?: number;
+  sequenceRunKey?: string;
 }
 
 // An inbound DM from a user. Campaigns with `dmTriggerEnabled` whose keywords

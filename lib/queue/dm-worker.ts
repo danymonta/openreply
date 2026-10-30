@@ -35,9 +35,11 @@ import {
 } from "@/lib/instagram/provider";
 import {
   createInstagramContext,
+  getUserFirstName,
   hasInstagramCredentials,
   type InstagramContext,
 } from "@/lib/instagram/provider";
+import { parseSequenceSteps } from "@/lib/automation/sequence";
 import { matchKeywords } from "@/lib/utils/keyword-matcher";
 import { reserveDMSlot, releaseDMSlot } from "@/lib/utils/rate-limiter";
 import {
@@ -47,6 +49,7 @@ import {
 import { recordWorkerAlert } from "@/lib/ops/worker-health";
 import {
   buildTrackedUrl,
+  hasNameToken,
   renderMessageWithTracking,
   renderMessageWithoutLink,
 } from "@/lib/tracking/message";
@@ -168,12 +171,14 @@ function buildInlineLinkFallback(
   commenterName: string | null | undefined,
   trackedLinks: WorkerTrackedLink[],
   bodyText: string,
-  recipientToken: string
+  recipientToken: string,
+  firstName?: string | null
 ): string {
   const base =
     renderMessageWithTracking({
       message,
       commenterName,
+      firstName,
       trackedLinks,
       recipientToken,
     }) || bodyText;
@@ -200,12 +205,14 @@ async function sendRevealDirectMessage({
   automation,
   userId,
   commenterName,
+  firstName,
   context,
 }: {
   accessToken: InstagramContext;
   automation: RevealAutomation;
   userId: string;
   commenterName: string | null;
+  firstName?: string | null;
   context: string;
 }): Promise<void> {
   if (automation.trackedLinks.length === 0) {
@@ -216,6 +223,7 @@ async function sendRevealDirectMessage({
       message: renderMessageWithTracking({
         message: automation.dmMessage,
         commenterName,
+        firstName,
         trackedLinks: automation.trackedLinks,
       }),
     });
@@ -227,6 +235,7 @@ async function sendRevealDirectMessage({
     renderMessageWithoutLink({
       message: automation.dmMessage,
       commenterName,
+      firstName,
     }) || "Here's your link:";
   const recipientToken = hashRecipientId(userId);
   const buttons = buildLinkButtons(
@@ -262,7 +271,8 @@ async function sendRevealDirectMessage({
           commenterName,
           automation.trackedLinks,
           bodyText,
-          recipientToken
+          recipientToken,
+          firstName
         ),
       });
     } catch (fallbackError) {
@@ -271,6 +281,104 @@ async function sendRevealDirectMessage({
   }
 }
 
+type NamedTextsAutomation = {
+  dmMessage: string;
+  openingDmMessage: string | null;
+  followPromptMessage: string | null;
+  followUpMessage: string | null;
+  sequenceSteps: unknown;
+};
+
+/** Whether any text this campaign sends asks for the first name. */
+function campaignUsesFirstName(automation: NamedTextsAutomation): boolean {
+  return (
+    [
+      automation.dmMessage,
+      automation.openingDmMessage,
+      automation.followPromptMessage,
+      automation.followUpMessage,
+    ].some(hasNameToken) ||
+    parseSequenceSteps(automation.sequenceSteps).some((step) =>
+      hasNameToken(step.message)
+    )
+  );
+}
+
+/**
+ * Fill in the names a message can use. The profile lookup only runs when it can
+ * add something: a campaign that asks for {nome}, or a DM sender whose username
+ * we have never seen (the messages webhook carries only an IGSID).
+ */
+async function resolveRecipientNames({
+  context,
+  userId,
+  commenterName,
+  automation,
+}: {
+  context: InstagramContext;
+  userId: string;
+  commenterName: string | null;
+  automation: NamedTextsAutomation;
+}): Promise<{ commenterName: string | null; firstName: string | null }> {
+  if (commenterName && !campaignUsesFirstName(automation)) {
+    return { commenterName, firstName: null };
+  }
+  const profile = await getUserFirstName({ context, recipientId: userId });
+  return {
+    commenterName: commenterName ?? profile.username,
+    firstName: profile.firstName,
+  };
+}
+
+/**
+ * Queue one message of a campaign's sequence. Each step queues the next after
+ * it is sent, so the pauses add up in order. `runKey` identifies the trigger
+ * (button tap or inbound DM) so a later trigger by the same person starts a
+ * fresh sequence instead of colliding with the job ids of an earlier one.
+ */
+async function scheduleSequenceStep({
+  automation,
+  userId,
+  commenterName,
+  firstName,
+  runKey,
+  step,
+}: {
+  automation: {
+    id: string;
+    instagramAccountId: string;
+    instagramAccount: { instagramId: string };
+    sequenceSteps: unknown;
+  };
+  userId: string;
+  commenterName: string | null;
+  firstName: string | null;
+  runKey: string;
+  step: number;
+}): Promise<void> {
+  const steps = parseSequenceSteps(automation.sequenceSteps);
+  const next = steps[step];
+  if (!next) return;
+
+  await getDMQueue().add(
+    FOLLOWUP_JOB_NAME,
+    {
+      instagramAccountId: automation.instagramAccount.instagramId,
+      accountConnectionId: automation.instagramAccountId,
+      userId,
+      automationId: automation.id,
+      commenterName,
+      firstName,
+      sequenceStep: step,
+      sequenceRunKey: runKey,
+    },
+    {
+      delay: next.delaySeconds * 1000,
+      // Hashed: trigger ids can hold characters BullMQ rejects in a job id.
+      jobId: `seq_${automation.id}_${userId}_${createHash("sha256").update(runKey).digest("hex").slice(0, 16)}_${step}`,
+    }
+  );
+}
 
 function connectionScope(data: DmQueueJob) {
   return data.accountConnectionId ? { instagramAccountId: data.accountConnectionId } : {};
@@ -648,6 +756,14 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           : alreadyFollows !== true;
     }
 
+    // Instagram rarely shares a commenter's profile before they have messaged
+    // the account, so this often comes back empty and {nome} falls back to the
+    // username. Only asked when the campaign actually uses {nome}.
+    const firstName = campaignUsesFirstName(automation)
+      ? (await getUserFirstName({ context: accessToken, recipientId: commenterId }))
+          .firstName
+      : null;
+
     let claimed;
     try {
       claimed = await claimCommentDelivery(automation.id, commentId, "dm");
@@ -667,6 +783,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         const openingText = renderMessageWithTracking({
           message: automation.openingDmMessage as string,
           commenterName,
+          firstName,
           trackedLinks: [],
         });
         await sendPrivateReplyWithButton({
@@ -686,6 +803,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
             automation.followPromptMessage ||
             "quick favor before i send your link. i don't make any money from this, it's free. if you want to support me, just don't unfollow after, and star the repo on github if it helps you. tap the button once you're following and i'll send it over",
           commenterName,
+          firstName,
         });
         await sendPrivateReplyWithButton({
           context: accessToken,
@@ -702,6 +820,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
           renderMessageWithoutLink({
             message: automation.dmMessage,
             commenterName,
+            firstName,
           }) || "Here's your link:";
         const buttons = buildLinkButtons(
           automation.trackedLinks,
@@ -733,7 +852,8 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
             commenterName,
             automation.trackedLinks,
             bodyText,
-            hashRecipientId(commenterId)
+            hashRecipientId(commenterId),
+            firstName
           );
           try {
             await sendPrivateReply({
@@ -751,6 +871,7 @@ async function processComment(job: Job<ProcessCommentJob>): Promise<void> {
         const dmMessage = renderMessageWithTracking({
           message: automation.dmMessage,
           commenterName,
+          firstName,
           trackedLinks: automation.trackedLinks,
           recipientToken: hashRecipientId(commenterId),
         });
@@ -942,8 +1063,6 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
     where: { automationId: automation.id, commenterId: userId },
     select: { commenterName: true },
   });
-  const commenterName = openingLog?.commenterName ?? null;
-
   let accessToken: InstagramContext;
   try {
     accessToken = await createInstagramContext(
@@ -953,6 +1072,15 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
   } catch {
     return;
   }
+
+  // The tap means the user has interacted, so Instagram will usually return a
+  // profile name here even when it would not for a bare commenter.
+  const { commenterName, firstName } = await resolveRecipientNames({
+    context: accessToken,
+    userId,
+    commenterName: openingLog?.commenterName ?? null,
+    automation,
+  });
 
   const operationId = createHash("sha256")
     .update(JSON.stringify([
@@ -1055,6 +1183,7 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
           automation.followPromptMessage ||
           "quick favor before i send your link. i don't make any money from this, it's free. if you want to support me, just don't unfollow after, and star the repo on github if it helps you. tap the button once you're following and i'll send it over",
         commenterName,
+        firstName,
       });
       try {
         await sendPostbackOnce({
@@ -1114,6 +1243,7 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
           automation: automation,
           userId: userId,
           commenterName: commenterName,
+          firstName,
           context: "postback",
         }),
     });
@@ -1124,6 +1254,16 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
       );
       return;
     }
+    // The reveal opened the sequence: queue its first message. Keyed to this
+    // tap, so a repeat tap (already deduped above) cannot start a second one.
+    await scheduleSequenceStep({
+      automation,
+      userId,
+      commenterName,
+      firstName,
+      runKey: operationId,
+      step: 0,
+    });
     // Optional appreciation follow-up: once the link has been delivered, send a
     // short thank-you. It is scheduled as its own delayed job so it can go out
     // some minutes later (followUpDelayMinutes) rather than immediately. The
@@ -1139,6 +1279,7 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
           userId,
           automationId: automation.id,
           commenterName,
+          firstName,
         },
         {
           delay: delayMs,
@@ -1223,7 +1364,10 @@ async function processPostback(job: Job<ProcessPostbackJob>): Promise<void> {
  * window closed because the delay was long), it is logged, not retried forever.
  */
 async function processFollowUp(job: Job<ProcessFollowUpJob>): Promise<void> {
-  const { instagramAccountId, userId, automationId, commenterName } = job.data;
+  if (job.data.sequenceStep !== undefined) return processSequenceStep(job);
+
+  const { instagramAccountId, userId, automationId, commenterName, firstName } =
+    job.data;
 
   const automation = await prisma.automation.findFirst({
     where: { id: automationId, isActive: true, ...connectionScope(job.data) },
@@ -1258,6 +1402,7 @@ async function processFollowUp(job: Job<ProcessFollowUpJob>): Promise<void> {
       message: renderMessageWithoutLink({
         message: automation.followUpMessage,
         commenterName: commenterName ?? null,
+        firstName: firstName ?? null,
       }),
     });
   } catch (error) {
@@ -1266,6 +1411,82 @@ async function processFollowUp(job: Job<ProcessFollowUpJob>): Promise<void> {
       formatError(error)
     );
   }
+}
+
+/**
+ * Send one message of a campaign's sequence, then queue the next. Like the
+ * follow-up it is best-effort: a failed send (usually a closed messaging
+ * window) is logged and ends the sequence, since every later message would
+ * fail the same way.
+ */
+async function processSequenceStep(job: Job<ProcessFollowUpJob>): Promise<void> {
+  const {
+    instagramAccountId,
+    userId,
+    automationId,
+    commenterName,
+    firstName,
+    sequenceStep = 0,
+    sequenceRunKey = String(job.id),
+  } = job.data;
+
+  const automation = await prisma.automation.findFirst({
+    where: { id: automationId, isActive: true, ...connectionScope(job.data) },
+    include: {
+      instagramAccount: true,
+      trackedLinks: { orderBy: TRACKED_LINK_ORDER },
+    },
+  });
+  if (
+    !automation ||
+    automation.instagramAccount.instagramId !== instagramAccountId ||
+    !hasInstagramCredentials(automation.instagramAccount)
+  ) {
+    return;
+  }
+
+  const step = parseSequenceSteps(automation.sequenceSteps)[sequenceStep];
+  if (!step) return;
+
+  let accessToken: InstagramContext;
+  try {
+    accessToken = await createInstagramContext(
+      automation.instagramAccount,
+      `${job.id}:${automation.id}`
+    );
+  } catch {
+    return;
+  }
+
+  try {
+    await sendDirectMessage({
+      context: accessToken,
+      instagramAccountId: automation.instagramAccount.instagramId,
+      userId,
+      message: renderMessageWithTracking({
+        message: step.message,
+        commenterName: commenterName ?? null,
+        firstName: firstName ?? null,
+        trackedLinks: automation.trackedLinks,
+        recipientToken: hashRecipientId(userId),
+      }),
+    });
+  } catch (error) {
+    console.log(
+      `[DM Worker] Failed to send sequence message ${sequenceStep + 1}:`,
+      formatError(error)
+    );
+    return;
+  }
+
+  await scheduleSequenceStep({
+    automation,
+    userId,
+    commenterName: commenterName ?? null,
+    firstName: firstName ?? null,
+    runKey: sequenceRunKey,
+    step: sequenceStep + 1,
+  });
 }
 
 /**
@@ -1388,12 +1609,18 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
     }
 
     // Reuse a name captured on an earlier interaction so {username} still
-    // renders — the messages webhook carries only the sender's IGSID.
+    // renders — the messages webhook carries only the sender's IGSID. Without
+    // one, the sender's profile supplies it (and the first name for {nome}).
     const priorLog = await prisma.dmLog.findFirst({
       where: { automationId: automation.id, commenterId: senderId },
       select: { commenterName: true },
     });
-    const commenterName = priorLog?.commenterName ?? null;
+    const { commenterName, firstName } = await resolveRecipientNames({
+      context: accessToken,
+      userId: senderId,
+      commenterName: priorLog?.commenterName ?? null,
+      automation,
+    });
 
     // Follow gate: anyone not confirmed as a follower gets the prompt instead of
     // the link, with the same `followcheck:` button that re-verifies on tap.
@@ -1443,6 +1670,7 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
             automation.followPromptMessage ||
             "Almost there! Follow me and tap the button below to grab your link 💛",
           commenterName,
+          firstName,
         });
         await sendDirectMessageWithButton({
           context: accessToken,
@@ -1458,7 +1686,19 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
           automation: automation,
           userId: senderId,
           commenterName: commenterName,
+          firstName,
           context: "message trigger",
+        });
+
+        // Same as after a button tap: the reveal starts the sequence. Keyed to
+        // the inbound message, which is already deduped to one reply.
+        await scheduleSequenceStep({
+          automation,
+          userId: senderId,
+          commenterName,
+          firstName,
+          runKey: messageId,
+          step: 0,
         });
 
         // The link has been delivered, so the appreciation follow-up applies
@@ -1473,6 +1713,7 @@ async function processMessage(job: Job<ProcessMessageJob>): Promise<void> {
               userId: senderId,
               automationId: automation.id,
               commenterName,
+              firstName,
             },
             {
               delay: Math.max(0, automation.followUpDelayMinutes ?? 0) * 60_000,

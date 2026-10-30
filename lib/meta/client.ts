@@ -283,6 +283,39 @@ export async function getUserFollowStatus(
   }
 }
 
+export interface InstagramUserProfile {
+  name: string | null;
+  username: string | null;
+}
+
+/**
+ * Read a messaging user's display name and username. Instagram only answers for
+ * users who have interacted with the account, so callers treat null as "unknown"
+ * and fall back to whatever name they already have.
+ */
+export async function getUserProfile(
+  accessToken: string,
+  recipientId: string
+): Promise<InstagramUserProfile | null> {
+  const url = new URL(`${instagramGraphBase()}/${recipientId}`);
+  url.searchParams.set("fields", "name,username");
+
+  try {
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return {
+      name: typeof data?.name === "string" && data.name.trim() ? data.name.trim() : null,
+      username: typeof data?.username === "string" ? data.username : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * A tappable web_url button in a DM button template. Instagram's button
  * template supports up to 3 buttons; titles are capped at 20 chars by Meta.

@@ -446,5 +446,11 @@
   "{name} Campaign Report": "Relatório da campanha {name}",
   "{type} post": "Publicação {type}",
   "”": "”",
-  "← Campaigns": "← Campanhas"
+  "← Campaigns": "← Campanhas",
+  "more messages in a row": "mais mensagens em sequência",
+  "Sent one after another after the message above, each after its own pause. They need an open conversation, so use them with an opening DM button or a DM / Story trigger.": "Enviadas uma após a outra depois da mensagem acima, cada uma após sua própria pausa. Exigem uma conversa aberta, então use com o botão da DM de abertura ou com um gatilho de DM / Story.",
+  "Message {n}, after": "Mensagem {n}, após",
+  "seconds": "segundos",
+  "+ Add a message": "+ Adicionar mensagem",
+  "inserts their first name (or their username when Instagram does not share it).": "insere o primeiro nome (ou o nome de usuário quando o Instagram não o compartilha)."
 }

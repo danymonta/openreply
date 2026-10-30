@@ -22,6 +22,26 @@ export async function getUserFollowStatus({
   }
 }
 
+/**
+ * Best-effort first name and username for a messaging user. Only the direct
+ * Meta connection exposes the profile; Zernio connections return null and the
+ * caller keeps the name it already has.
+ */
+export async function getUserFirstName({
+  context,
+  recipientId,
+}: {
+  context: InstagramContext;
+  recipientId: string;
+}): Promise<{ firstName: string | null; username: string | null }> {
+  if (context.provider !== "META") return { firstName: null, username: null };
+  const profile = await meta.getUserProfile(context.accessToken, recipientId);
+  return {
+    firstName: profile?.name?.split(/\s+/)[0] ?? null,
+    username: profile?.username ?? null,
+  };
+}
+
 export async function getMediaInsights({
   context,
   mediaId,

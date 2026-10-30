@@ -15,6 +15,7 @@ import {
   syncCampaignLinks,
 } from "@/lib/campaigns/links";
 import { buildReportUrl, generateReportShareSlug } from "@/lib/reports/share";
+import { sequenceStepsSchema } from "@/lib/automation/sequence";
 import {
   canManageWorkspace,
   getCurrentWorkspaceContext,
@@ -49,6 +50,7 @@ const createAutomationSchema = z
     // Minutes to wait before the follow-up. Capped at 24h so it stays inside
     // Instagram's messaging window.
     followUpDelayMinutes: z.number().int().min(0).max(1440).optional().default(0),
+    sequenceSteps: sequenceStepsSchema.optional().default([]),
     publicReplyEnabled: z.boolean().optional().default(false),
     publicReplyMessage: z.string().max(1000).optional().nullable(),
     publicReplyMessages: z
@@ -110,6 +112,7 @@ const updateAutomationSchema = z.object({
   followUpEnabled: z.boolean().optional(),
   followUpMessage: z.string().max(1000).optional().nullable(),
   followUpDelayMinutes: z.number().int().min(0).max(1440).optional(),
+  sequenceSteps: sequenceStepsSchema.optional(),
   publicReplyEnabled: z.boolean().optional(),
   publicReplyMessage: z.string().max(1000).optional().nullable(),
   publicReplyMessages: z.array(z.string().max(1000)).max(10).optional(),
@@ -406,6 +409,7 @@ export async function POST(request: NextRequest) {
       followUpDelayMinutes: parsed.data.followUpEnabled
         ? parsed.data.followUpDelayMinutes
         : 0,
+      sequenceSteps: parsed.data.sequenceSteps,
       publicReplyEnabled: parsed.data.publicReplyEnabled,
       publicReplyMessages: parsed.data.publicReplyEnabled
         ? publicReplyList

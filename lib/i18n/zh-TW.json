@@ -446,5 +446,11 @@
   "{name} Campaign Report": "{name} 活動報表",
   "{type} post": "{type} 貼文",
   "”": "」",
-  "← Campaigns": "← 返回活動列表"
+  "← Campaigns": "← 返回活動列表",
+  "more messages in a row": "連續傳送更多訊息",
+  "Sent one after another after the message above, each after its own pause. They need an open conversation, so use them with an opening DM button or a DM / Story trigger.": "在上方訊息之後依序傳送，每則各有自己的間隔。需要對話已開啟，請搭配開場私訊按鈕或私訊／限時動態觸發使用。",
+  "Message {n}, after": "第 {n} 則訊息，間隔",
+  "seconds": "秒",
+  "+ Add a message": "+ 新增訊息",
+  "inserts their first name (or their username when Instagram does not share it).": "插入對方的名字（若 Instagram 未提供，則使用使用者名稱）。"
 }

@@ -19,6 +19,7 @@ import AccountSelect, { type AccountOption } from "@/components/account-select";
 import PostPicker from "@/components/post-picker";
 import CampaignPreview, { type PreviewTab } from "@/components/campaign-preview";
 import { readCache, writeCache } from "@/lib/client-cache";
+import { parseSequenceSteps, type SequenceStep } from "@/lib/automation/sequence";
 import {
   IMPORT_QUEUE_KEY,
   IMPORT_ACCOUNT_KEY,
@@ -49,6 +50,7 @@ interface LoadedCampaign {
   followUpEnabled: boolean;
   followUpMessage: string | null;
   followUpDelayMinutes: number | null;
+  sequenceSteps?: unknown;
   publicReplyEnabled: boolean;
   publicReplyMessage: string | null;
   publicReplyMessages: string[];
@@ -182,6 +184,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
   const [followUpEnabled, setFollowUpEnabled] = useState(false);
   const [followUpMessage, setFollowUpMessage] = useState("");
   const [followUpDelayMinutes, setFollowUpDelayMinutes] = useState(0);
+  const [sequenceSteps, setSequenceSteps] = useState<SequenceStep[]>([]);
 
   const [previewTab, setPreviewTab] = useState<PreviewTab>("dm");
 
@@ -290,6 +293,7 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
         setFollowUpEnabled(c.followUpEnabled ?? false);
         setFollowUpMessage(c.followUpMessage ?? "");
         setFollowUpDelayMinutes(c.followUpDelayMinutes ?? 0);
+        setSequenceSteps(parseSequenceSteps(c.sequenceSteps));
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
@@ -429,6 +433,9 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
       followUpEnabled,
       followUpMessage: followUpEnabled ? followUpMessage.trim() : "",
       followUpDelayMinutes: followUpEnabled ? followUpDelayMinutes : 0,
+      sequenceSteps: sequenceSteps
+        .map((step) => ({ ...step, message: step.message.trim() }))
+        .filter((step) => step.message),
       isActive: activeValue,
     };
 
@@ -974,6 +981,82 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
                 </p>
               </div>
             )}
+          </div>
+          <div className="mt-3 rounded-lg border border-border p-3">
+            <span className="text-sm text-foreground">
+              {t("more messages in a row")}
+            </span>
+            <p className="mt-1 text-xs text-muted">
+              {t("Sent one after another after the message above, each after its own pause. They need an open conversation, so use them with an opening DM button or a DM / Story trigger.")}
+            </p>
+            {sequenceSteps.map((step, index) => (
+              <div key={index} className="mt-3 space-y-2">
+                <div className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+                  <span className="text-xs text-muted">
+                    {t("Message {n}, after", { n: index + 2 })}
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={86400}
+                    value={step.delaySeconds}
+                    onChange={(e) =>
+                      setSequenceSteps((steps) =>
+                        steps.map((s, i) =>
+                          i === index
+                            ? {
+                                ...s,
+                                delaySeconds: Math.max(
+                                  0,
+                                  Math.min(86400, Math.floor(Number(e.target.value) || 0))
+                                ),
+                              }
+                            : s
+                        )
+                      )
+                    }
+                    className="w-20 rounded-lg border border-border bg-surface px-2 py-1 text-sm text-foreground focus:border-accent/40 focus:outline-none"
+                  />
+                  <span className="text-xs text-muted">{t("seconds")}</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSequenceSteps((steps) => steps.filter((_, i) => i !== index))
+                    }
+                    className="ml-auto text-xs text-muted hover:text-foreground"
+                  >
+                    {t("Remove")}
+                  </button>
+                </div>
+                <textarea
+                  value={step.message}
+                  onChange={(e) =>
+                    setSequenceSteps((steps) =>
+                      steps.map((s, i) =>
+                        i === index ? { ...s, message: e.target.value } : s
+                      )
+                    )
+                  }
+                  rows={3}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none resize-none"
+                  maxLength={1000}
+                />
+              </div>
+            ))}
+            {sequenceSteps.length < 10 && (
+              <button
+                type="button"
+                onClick={() =>
+                  setSequenceSteps((steps) => [...steps, { message: "", delaySeconds: 5 }])
+                }
+                className="mt-3 w-full rounded-lg border border-border py-2 text-sm text-muted hover:text-foreground"
+              >
+                {t("+ Add a message")}
+              </button>
+            )}
+            <p className="mt-2 text-xs text-muted">
+              {"{nome}"} {t("inserts their first name (or their username when Instagram does not share it).")}
+            </p>
           </div>
         </Section>
       </div>

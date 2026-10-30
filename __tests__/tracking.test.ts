@@ -179,3 +179,21 @@ describe("per-recipient click tracking", () => {
     );
   });
 });
+
+describe("first-name personalization", () => {
+  it("fills {nome}, {name} and {first_name} with the first name", () => {
+    expect(
+      renderMessageWithTracking({
+        message: "Ciao {nome}! Hi {name}, {first_name}",
+        commenterName: "mario.r",
+        firstName: "Mario",
+      })
+    ).toBe("Ciao Mario! Hi Mario, Mario");
+  });
+
+  it("falls back to the username when no first name is known", () => {
+    expect(
+      renderMessageWithTracking({ message: "Ciao {nome}!", commenterName: "mario.r" })
+    ).toBe("Ciao mario.r!");
+  });
+});
