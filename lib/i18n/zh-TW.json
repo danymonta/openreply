@@ -452,5 +452,7 @@
   "Message {n}, after": "第 {n} 則訊息，間隔",
   "seconds": "秒",
   "+ Add a message": "+ 新增訊息",
-  "inserts their first name (or their username when Instagram does not share it).": "插入對方的名字（若 Instagram 未提供，則使用使用者名稱）。"
+  "inserts their first name (or their username when Instagram does not share it).": "插入對方的名字（若 Instagram 未提供，則使用使用者名稱）。",
+  "no post: only DMs and Story replies": "不綁定貼文：只回覆私訊與限時動態回覆",
+  "Turn on the DM trigger, or pick which posts trigger the campaign.": "請開啟私訊觸發，或選擇觸發活動的貼文。"
 }

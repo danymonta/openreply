@@ -452,5 +452,7 @@
   "Message {n}, after": "Mensagem {n}, após",
   "seconds": "segundos",
   "+ Add a message": "+ Adicionar mensagem",
-  "inserts their first name (or their username when Instagram does not share it).": "insere o primeiro nome (ou o nome de usuário quando o Instagram não o compartilha)."
+  "inserts their first name (or their username when Instagram does not share it).": "insere o primeiro nome (ou o nome de usuário quando o Instagram não o compartilha).",
+  "no post: only DMs and Story replies": "nenhum post: só DMs e respostas a Stories",
+  "Turn on the DM trigger, or pick which posts trigger the campaign.": "Ative o gatilho de DM ou escolha quais posts acionam a campanha."
 }

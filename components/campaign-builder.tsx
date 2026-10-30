@@ -26,7 +26,9 @@ import {
   type ImportRow,
 } from "@/lib/import-queue";
 
-type TriggerScope = "specific" | "any" | "next";
+// "none": no post trigger at all — the campaign only answers DMs and Story
+// replies, which needs the DM trigger switched on.
+type TriggerScope = "specific" | "any" | "next" | "none";
 type MatchMode = "specific" | "any";
 
 interface LoadedCampaign {
@@ -257,7 +259,13 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
         setName(c.name);
         setSelectedAccountId(c.instagramAccountId);
         setTriggerScope(
-          c.matchAnyPost ? "any" : c.pendingNextReel ? "next" : "specific"
+          c.matchAnyPost
+            ? "any"
+            : c.pendingNextReel
+              ? "next"
+              : c.postId
+                ? "specific"
+                : "none"
         );
         setPostId(c.postId);
         setPostUrl(c.postUrl);
@@ -395,6 +403,8 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
     if (!selectedAccountId) return setError(t("Connect an Instagram account first."));
     if (triggerScope === "specific" && !postId)
       return setError(t("Pick a post or reel to trigger the campaign."));
+    if (triggerScope === "none" && !dmTriggerEnabled)
+      return setError(t("Turn on the DM trigger, or pick which posts trigger the campaign."));
     if (matchMode === "specific" && keywords.length === 0)
       return setError(t("Add at least one keyword, or switch to any word."));
     if (!dmMessage.trim()) return setError(t("Add the DM with the link."));
@@ -703,6 +713,15 @@ export default function CampaignBuilder({ mode, campaignId }: CampaignBuilderPro
             onSelect={() => setTriggerScope("next")}
           >
             {t("next post or reel")}
+          </Radio>
+          <Radio
+            checked={triggerScope === "none"}
+            onSelect={() => {
+              setTriggerScope("none");
+              setDmTriggerEnabled(true);
+            }}
+          >
+            {t("no post: only DMs and Story replies")}
           </Radio>
         </Section>
 

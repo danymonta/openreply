@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import CampaignPreview, { type PreviewTab } from "@/components/campaign-preview";
+import { parseSequenceSteps } from "@/lib/automation/sequence";
 
 interface Campaign {
   id: string;
@@ -35,6 +36,7 @@ interface Campaign {
   followUpEnabled: boolean;
   followUpMessage: string | null;
   followUpDelayMinutes: number | null;
+  sequenceSteps?: unknown;
   publicReplyEnabled: boolean;
   publicReplyMessage: string | null;
   publicReplyMessages: string[];
@@ -151,13 +153,16 @@ export default function CampaignDetailPage() {
         ? [campaign.publicReplyMessage]
         : [];
   const hasLink = Boolean(campaign.trackedLinks?.[0]?.destinationUrl);
+  const sequenceSteps = parseSequenceSteps(campaign.sequenceSteps);
   const hasSecondLink = Boolean(campaign.trackedLinks?.[1]?.destinationUrl);
 
   const trigger = campaign.matchAnyPost
     ? t("Any post or reel")
     : campaign.pendingNextReel
       ? t("Your next reel")
-      : t("A specific post or reel");
+      : campaign.postId
+        ? t("A specific post or reel")
+        : t("no post: only DMs and Story replies");
   const matchText = campaign.matchAnyWord
     ? t("Any comment")
     : campaign.keywords.join(", ") || t("No keywords");
@@ -289,6 +294,19 @@ export default function CampaignDetailPage() {
                 ? t("Sent {minutes} min after the link.", { minutes: campaign.followUpDelayMinutes })
                 : t("Sent right after the link.")}
             </p>
+          </Summary>
+        )}
+
+        {sequenceSteps.length > 0 && (
+          <Summary title={t("more messages in a row")}>
+            {sequenceSteps.map((step, index) => (
+              <div key={index} className="space-y-1">
+                <p className="text-xs text-muted">
+                  {t("Message {n}, after", { n: index + 2 })} {step.delaySeconds} {t("seconds")}
+                </p>
+                <FieldBox>{step.message}</FieldBox>
+              </div>
+            ))}
           </Summary>
         )}
       </div>
