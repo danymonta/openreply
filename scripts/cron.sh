@@ -39,6 +39,8 @@ echo "[cron] scheduler started, target $BASE_URL"
 
 last_slot=""
 last_daily=""
+last_health=""
+last_backup=""
 
 while true; do
   now=$(date -u '+%Y-%m-%d %H:%M')
@@ -55,9 +57,27 @@ while true; do
       if [ "$last_slot" != "$hhmm" ]; then
         last_slot="$hhmm"
         call attach-next-reel
+        call contact-webhook
       fi
       ;;
   esac
+
+  # Health check every 15 minutes: emails the owner when the worker, the
+  # Instagram token or DM delivery breaks (and again when it recovers).
+  case "$minute" in
+    00|15|30|45)
+      if [ "$last_health" != "$hhmm" ]; then
+        last_health="$hhmm"
+        call health-check
+      fi
+      ;;
+  esac
+
+  # Nightly database backup, emailed to the owner (Railway Hobby has none).
+  if [ "$hour" = "03" ] && [ "$last_backup" != "$today" ]; then
+    last_backup="$today"
+    call backup
+  fi
 
   # Once a day, early: the token refresh has a 10-day window before expiry, so
   # the exact hour does not matter — only that it happens every day.

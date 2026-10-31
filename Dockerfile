@@ -34,9 +34,19 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # scripts/cron.sh calls the /api/cron routes with wget, which node:24-slim does
-# not include.
+# not include. pg_dump serves the nightly /api/cron/backup: it comes from the
+# PostgreSQL apt repo because a client older than the server refuses to dump,
+# and Debian's own package lags behind managed Postgres versions.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends wget ca-certificates \
+ && apt-get install -y --no-install-recommends wget ca-certificates gnupg \
+ && . /etc/os-release \
+ && wget -qO- https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
+ && echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+    > /etc/apt/sources.list.d/pgdg.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends postgresql-client-18 \
+ && apt-get purge -y gnupg && apt-get autoremove -y \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/node_modules ./node_modules

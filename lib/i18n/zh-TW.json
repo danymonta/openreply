@@ -485,6 +485,7 @@
   "Remove this folder? Its campaigns are kept, just unfiled.": "移除此資料夾？其中的活動會保留，只是不再歸類。",
   "Rename": "重新命名",
   "Rename folder": "重新命名資料夾",
+  "Export CSV": "匯出 CSV",
   "Search by username or campaign…": "依使用者名稱或活動搜尋…",
   "Select a person to see everything they did.": "選擇一個人以查看其所有活動。",
   "Triggers": "觸發次數",

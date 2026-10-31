@@ -125,12 +125,20 @@ function Contacts() {
         </div>
       </div>
 
-      <input
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder={t("Search by username or campaign…")}
-        className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
-      />
+      <div className="flex gap-2">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={t("Search by username or campaign…")}
+          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-zinc-500 focus:border-accent/40 focus:outline-none"
+        />
+        <a
+          href={`/api/contacts/export?${new URLSearchParams({ days: String(days), q: search.trim() })}`}
+          className="shrink-0 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-surface-hover"
+        >
+          {t("Export CSV")}
+        </a>
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-5">
         <div className="panel overflow-x-auto rounded p-4 lg:col-span-3">

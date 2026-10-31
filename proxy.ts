@@ -18,7 +18,30 @@ function hasSessionCookie(request: NextRequest): boolean {
   );
 }
 
+/**
+ * LINK_BASE_URL is a short branded domain that serves only the tracked links
+ * in DMs (/r/<slug>). Anything else asked of that host goes to LINK_HOME_URL
+ * (the brand's site), so the dashboard and login never show up on it.
+ */
+function linkHostRedirect(request: NextRequest): NextResponse | null {
+  const linkBase = process.env.LINK_BASE_URL;
+  if (!linkBase) return null;
+  let linkHost: string;
+  try {
+    linkHost = new URL(linkBase).host;
+  } catch {
+    return null;
+  }
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  if (host !== linkHost || request.nextUrl.pathname.startsWith("/r/")) return null;
+  const home = process.env.LINK_HOME_URL || process.env.NEXTAUTH_URL;
+  return home ? NextResponse.redirect(home) : null;
+}
+
 export function proxy(request: NextRequest) {
+  const linkRedirect = linkHostRedirect(request);
+  if (linkRedirect) return linkRedirect;
+
   const pathname = request.nextUrl.pathname;
   const isProtected = PROTECTED_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
@@ -48,5 +71,8 @@ export const config = {
     "/analytics/:path*",
     "/contacts/:path*",
     "/login",
+    // Every other page too, for the link-domain redirect above; static
+    // assets, API routes and the tracked links themselves skip the proxy.
+    "/((?!_next/|api/|r/|favicon.ico).*)",
   ],
 };

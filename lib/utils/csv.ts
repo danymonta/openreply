@@ -85,3 +85,22 @@ export function instagramShortcode(value: string): string | null {
   const match = value.match(/instagram\.com\/(?:reels?|p|tv)\/([A-Za-z0-9_-]+)/i);
   return match ? match[1] : null;
 }
+
+/**
+ * Serializes rows to CSV (RFC 4180 quoting, CRLF). Cells that a spreadsheet
+ * would run as a formula (=, +, -, @) get a leading apostrophe, since names
+ * and comment text come from strangers on Instagram.
+ */
+export function toCsv(rows: (string | number | null | undefined)[][]): string {
+  return rows
+    .map((row) =>
+      row
+        .map((cell) => {
+          let value = cell === null || cell === undefined ? "" : String(cell);
+          if (/^[=+\-@\t\r]/.test(value)) value = `'${value}`;
+          return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+        })
+        .join(",")
+    )
+    .join("\r\n");
+}

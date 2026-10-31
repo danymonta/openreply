@@ -166,6 +166,19 @@ export function parseCommentEvents(payload: WebhookPayload): WebhookCommentEvent
 }
 
 /**
+ * Payload prefix of an ice breaker (the questions offered when someone opens a
+ * new chat). The rest of the payload is a DM keyword: the tap is handled as if
+ * the person had typed it, so the DM-trigger campaign for that word answers.
+ */
+export const ICE_BREAKER_PREFIX = "ib:";
+
+export function iceBreakerKeyword(payload: string): string | null {
+  if (!payload.startsWith(ICE_BREAKER_PREFIX)) return null;
+  const keyword = payload.slice(ICE_BREAKER_PREFIX.length).trim();
+  return keyword || null;
+}
+
+/**
  * Parse button-tap postbacks (from an opening DM's button) out of a webhook
  * payload. Each event carries the tapping user's IGSID and our postback payload.
  */

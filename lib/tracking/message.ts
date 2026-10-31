@@ -83,7 +83,7 @@ export function buildTrackedUrl(
     baseUrl ??
     (typeof window !== "undefined"
       ? window.location.origin
-      : process.env.NEXTAUTH_URL ?? "http://localhost:3000");
+      : process.env.LINK_BASE_URL || process.env.NEXTAUTH_URL || "http://localhost:3000");
 
   const url = `${resolvedBaseUrl.replace(/\/$/, "")}/r/${slug}`;
   return recipientToken ? `${url}?r=${recipientToken}` : url;

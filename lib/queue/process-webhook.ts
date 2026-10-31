@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db/client';
 import { getDMQueue, MESSAGE_JOB_NAME, POSTBACK_JOB_NAME } from '@/lib/queue/client';
-import { parseCommentEvents, parseMessageEvents, parsePostbackEvents, parseReadEvents } from '@/lib/meta/webhook';
+import { iceBreakerKeyword, parseCommentEvents, parseMessageEvents, parsePostbackEvents, parseReadEvents } from '@/lib/meta/webhook';
 import { Prisma, type InstagramProvider } from '@/app/generated/prisma/client';
 
 const OPENING_DM_READ_FALLBACK_DELAY_MS = 5 * 60 * 1000;
@@ -72,6 +72,28 @@ export async function processInstagramWebhook({ payload: incoming, provider, wor
     );
 
     for (const event of postbackEvents) {
+      // An ice breaker tap stands for a typed keyword: queue it as a DM.
+      const keyword = iceBreakerKeyword(event.payload);
+      if (keyword) {
+        const messageId = event.mid ?? `ib_${event.userId}_${Date.now()}`;
+        await queue.add(
+          MESSAGE_JOB_NAME,
+          {
+            instagramAccountId: event.instagramAccountId,
+            accountConnectionId: accountMap.get(event.instagramAccountId)?.id,
+            messageId,
+            messageText: keyword,
+            senderId: event.userId,
+          },
+          {
+            jobId: `message_${event.instagramAccountId}_${Buffer.from(
+              messageId
+            ).toString("base64url")}`,
+          }
+        );
+        continue;
+      }
+
       await queue.add(
         POSTBACK_JOB_NAME,
         {

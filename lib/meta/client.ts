@@ -873,3 +873,63 @@ export async function debugToken(inputToken: string, accessToken: string) {
   const response = await fetch(url.toString());
   return handleResponse(response);
 }
+
+/**
+ * Ice breakers: up to 4 questions shown when someone opens a new chat with
+ * the account. A tap arrives as a messaging_postback carrying `payload`.
+ */
+export interface IceBreaker {
+  question: string;
+  payload: string;
+}
+
+export async function getIceBreakers(accessToken: string): Promise<IceBreaker[]> {
+  const url = new URL(`${instagramGraphBase()}/me/messenger_profile`);
+  url.searchParams.set("fields", "ice_breakers");
+  url.searchParams.set("platform", "instagram");
+  const response = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(`ice_breakers read failed: ${JSON.stringify(data?.error ?? data)}`);
+  }
+  const entries = (data?.data?.[0]?.ice_breakers ?? []) as Array<{
+    call_to_actions?: IceBreaker[];
+    locale?: string;
+  }>;
+  const entry = entries.find((e) => e.locale === "default") ?? entries[0];
+  return (entry?.call_to_actions ?? []).map(({ question, payload }) => ({ question, payload }));
+}
+
+export async function setIceBreakers(
+  accessToken: string,
+  iceBreakers: IceBreaker[]
+): Promise<void> {
+  const url = `${instagramGraphBase()}/me/messenger_profile`;
+  const response =
+    iceBreakers.length === 0
+      ? await fetch(url, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ fields: ["ice_breakers"], platform: "instagram" }),
+        })
+      : await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            platform: "instagram",
+            ice_breakers: [{ call_to_actions: iceBreakers, locale: "default" }],
+          }),
+        });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(`ice_breakers update failed: ${JSON.stringify(data?.error ?? data)}`);
+  }
+}
