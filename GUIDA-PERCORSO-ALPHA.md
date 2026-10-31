@@ -193,3 +193,14 @@ docker compose -f compose.selfhost.yml --profile prod up -d --build
 - Il token Instagram dura 60 giorni e si rinnova da solo (servizio `cron`); se `/api/health` o i log del cron mostrano errori, ricollega l'account.
 - Segui le issue/PR di sicurezza su github.com/diwenne/openreply; se il manutentore non le unisce, applicale tu (come fatto qui).
 - Aggiorna le immagini Docker (`docker compose pull`) e il sistema del VPS (automatico).
+
+## 9. Avvisi, backup, link e contatti
+
+- **Avvisi via mail** (ogni 15 minuti, a `ALERT_EMAIL` o al primo indirizzo di `ALLOWED_EMAILS`): worker fermo, token Instagram non rinnovato o in scadenza entro 3 giorni, Instagram che rifiuta l'accesso, 5+ DM o eventi falliti in un'ora. Una mail per problema (promemoria ogni 12 ore) e una "Tutto di nuovo a posto" quando si risolve. Gli errori "invalid for a private reply" sono ignorati: sono commenti a cui aveva già risposto ManyChat.
+- **Backup** ogni notte alle 03:00 UTC: arriva per mail il file `openreply-AAAA-MM-GG.dump`. Per ripristinarlo su un database vuoto:
+  ```bash
+  pg_restore --no-owner --clean -d "<DATABASE_URL>" openreply-AAAA-MM-GG.dump
+  ```
+- **Link nei DM** su `https://link.percorsoalpha.com/r/…` (CNAME `link` → Railway su Netsons, variabile `LINK_BASE_URL` su web e worker). Qualsiasi altro indirizzo su quel dominio porta al profilo Instagram (`LINK_HOME_URL`).
+- **Contatti**: pulsante "Export CSV" nella pagina Contacts. Per mandare ogni nuovo contatto a un CRM imposta sul servizio web `CONTACT_WEBHOOK_URL` e `CONTACT_WEBHOOK_SECRET`: ogni 5 minuti arriva un POST firmato (`X-OpenReply-Signature: sha256=…`).
+- **Conversation Starter** ("Voglio sapere come funziona il tuo Percorso") è su OpenReply: il tocco equivale a scrivere "Coaching" e risponde la campagna INFO COACHING. Si cambia con `PUT /api/instagram/ice-breakers` (massimo 4 domande); su ManyChat è disattivato.
