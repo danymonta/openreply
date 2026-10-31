@@ -894,12 +894,17 @@ export async function getIceBreakers(accessToken: string): Promise<IceBreaker[]>
   if (!response.ok) {
     throw new Error(`ice_breakers read failed: ${JSON.stringify(data?.error ?? data)}`);
   }
-  const entries = (data?.data?.[0]?.ice_breakers ?? []) as Array<{
-    call_to_actions?: IceBreaker[];
-    locale?: string;
-  }>;
-  const entry = entries.find((e) => e.locale === "default") ?? entries[0];
-  return (entry?.call_to_actions ?? []).map(({ question, payload }) => ({ question, payload }));
+  // The read shape is not the write shape and varies by API version: accept
+  // ice_breakers either wrapped per locale ({call_to_actions, locale}) or flat.
+  type Item = { question?: string; payload?: string };
+  type Entry = Item & { call_to_actions?: Item[]; locale?: string };
+  const entries = ((data?.data ?? []) as Array<{ ice_breakers?: Entry[] } & Entry>).flatMap(
+    (row) => row.ice_breakers ?? (row.call_to_actions ? [row] : [])
+  );
+  const items = entries.flatMap((entry) => entry.call_to_actions ?? [entry]);
+  return items
+    .filter((item): item is IceBreaker => typeof item.question === "string")
+    .map(({ question, payload }) => ({ question, payload: payload ?? "" }));
 }
 
 export async function setIceBreakers(

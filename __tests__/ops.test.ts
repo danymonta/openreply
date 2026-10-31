@@ -97,3 +97,28 @@ describe("ops helpers", () => {
     );
   });
 });
+
+describe("getIceBreakers", () => {
+  it("reads ice breakers wrapped per locale or flat", async () => {
+    const { getIceBreakers } = await import("../lib/meta/client");
+    const respond = (body: unknown) =>
+      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+        new Response(JSON.stringify(body), { status: 200 })
+      );
+
+    respond({
+      data: [
+        {
+          ice_breakers: [
+            { call_to_actions: [{ question: "Come funziona?", payload: "ib:Coaching" }], locale: "default" },
+          ],
+        },
+      ],
+    });
+    expect(await getIceBreakers("t")).toEqual([{ question: "Come funziona?", payload: "ib:Coaching" }]);
+
+    respond({ data: [{ ice_breakers: [{ question: "Come funziona?" }] }] });
+    expect(await getIceBreakers("t")).toEqual([{ question: "Come funziona?", payload: "" }]);
+    vi.restoreAllMocks();
+  });
+});

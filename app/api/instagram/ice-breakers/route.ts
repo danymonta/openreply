@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getWorkspaceInstagramAccount } from "@/lib/instagram-accounts";
 import { createInstagramContext } from "@/lib/instagram/provider";
 import { getIceBreakers, setIceBreakers } from "@/lib/meta/client";
-import { ICE_BREAKER_PREFIX } from "@/lib/meta/webhook";
+import { ICE_BREAKER_PREFIX, iceBreakerKeyword } from "@/lib/meta/webhook";
 import {
   canManageWorkspace,
   getCurrentWorkspaceContext,
@@ -52,9 +52,7 @@ export async function GET(request: NextRequest) {
       data: {
         iceBreakers: iceBreakers.map((b) => ({
           question: b.question,
-          keyword: b.payload.startsWith(ICE_BREAKER_PREFIX)
-            ? b.payload.slice(ICE_BREAKER_PREFIX.length)
-            : null,
+          keyword: iceBreakerKeyword(b.payload),
           payload: b.payload,
         })),
       },
