@@ -28,7 +28,11 @@ export async function GET(request: NextRequest, { params }: RedirectRouteProps) 
   });
 
   if (!trackedLink) {
-    return NextResponse.redirect(new URL("/", request.url), { status: 302 });
+    // Behind a proxy request.url is the internal address (0.0.0.0:<port>), so
+    // an unknown slug goes to the configured home page instead.
+    const home =
+      process.env.LINK_HOME_URL || process.env.NEXTAUTH_URL || new URL("/", request.url).toString();
+    return NextResponse.redirect(home, { status: 302 });
   }
 
   await prisma.linkClick.create({

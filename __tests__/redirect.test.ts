@@ -94,6 +94,8 @@ describe("tracked link redirect route", () => {
   });
 
   it("redirects unknown slugs to the homepage without logging a click", async () => {
+    vi.stubEnv("LINK_HOME_URL", "");
+    vi.stubEnv("NEXTAUTH_URL", "");
     mockPrisma.trackedLink.findUnique.mockResolvedValue(null);
 
     const response = await GET(
@@ -106,5 +108,19 @@ describe("tracked link redirect route", () => {
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("https://manychat-alternative.com/");
     expect(mockPrisma.linkClick.create).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+
+  it("sends unknown slugs to LINK_HOME_URL, not the proxy's internal address", async () => {
+    vi.stubEnv("LINK_HOME_URL", "https://instagram.com/brand");
+    mockPrisma.trackedLink.findUnique.mockResolvedValue(null);
+
+    const response = await GET(
+      new Request("https://0.0.0.0:8080/r/missing") as Parameters<typeof GET>[0],
+      { params: Promise.resolve({ slug: "missing" }) }
+    );
+
+    expect(response.headers.get("location")).toBe("https://instagram.com/brand");
+    vi.unstubAllEnvs();
   });
 });
